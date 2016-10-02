@@ -66,6 +66,7 @@ struct cpu_data {
 	bool not_preferred;
 	struct cluster_data *cluster;
 	struct list_head sib;
+	bool always_online_cpu;
 };
 
 static DEFINE_PER_CPU(struct cpu_data, cpu_state);
@@ -379,6 +380,47 @@ static ssize_t show_disable(const struct cluster_data *state, char *buf)
 	return snprintf(buf, PAGE_SIZE, "%u\n", state->disabled);
 }
 
+static ssize_t show_always_online_cpu(const struct cluster_data *state, char *buf)
+{
+	struct cpu_data *c;
+	ssize_t count = 0;
+	unsigned int i, first_cpu;
+
+	first_cpu = state->first_cpu;
+
+	for (i = 0; i < state->num_cpus; i++) {
+		c = &per_cpu(cpu_state, first_cpu);
+		count += snprintf(buf + count, PAGE_SIZE - count,
+				"\tCPU:%d %u\n", first_cpu, c->always_online_cpu);
+		first_cpu++;
+	}
+
+	return count;
+}
+
+static ssize_t store_always_online_cpu(struct cluster_data *state,
+				const char *buf, size_t count)
+{
+	struct cpu_data *c;
+	unsigned int i, first_cpu;
+	unsigned int val[MAX_CPUS_PER_CLUSTER];
+	int ret;
+
+	ret = sscanf(buf, "%u %u %u %u\n", &val[0], &val[1], &val[2], &val[3]);
+	if (ret != 1 && ret != state->num_cpus)
+		return -EINVAL;
+
+	first_cpu = state->first_cpu;
+
+	for (i = 0; i < state->num_cpus; i++) {
+		c = &per_cpu(cpu_state, first_cpu);
+		c->always_online_cpu = val[i];
+		first_cpu++;
+	}
+
+	return count;
+}
+
 struct core_ctl_attr {
 	struct attribute attr;
 	ssize_t (*show)(const struct cluster_data *, char *);
@@ -406,6 +448,7 @@ core_ctl_attr_ro(online_cpus);
 core_ctl_attr_ro(global_state);
 core_ctl_attr_rw(not_preferred);
 core_ctl_attr_rw(disable);
+core_ctl_attr_rw(always_online_cpu);
 
 static struct attribute *default_attrs[] = {
 	&min_cpus.attr,
@@ -421,6 +464,7 @@ static struct attribute *default_attrs[] = {
 	&global_state.attr,
 	&not_preferred.attr,
 	&disable.attr,
+	&always_online_cpu.attr,
 	NULL
 };
 
@@ -750,7 +794,7 @@ static void __ref do_hotplug(struct cluster_data *cluster)
 
 	if (cluster->online_cpus > need) {
 		list_for_each_entry_safe(c, tmp, &cluster->lru, sib) {
-			if (!c->online)
+			if (!c->online || c->always_online_cpu)
 				continue;
 
 			if (cluster->online_cpus == need)
@@ -773,7 +817,7 @@ static void __ref do_hotplug(struct cluster_data *cluster)
 			return;
 
 		list_for_each_entry_safe(c, tmp, &cluster->lru, sib) {
-			if (!c->online)
+			if (!c->online || c->always_online_cpu)
 				continue;
 
 			if (cluster->online_cpus <= cluster->max_cpus)
