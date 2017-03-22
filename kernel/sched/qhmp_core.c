@@ -2167,7 +2167,8 @@ static inline void update_cpu_busy_time(struct task_struct *p, struct rq *rq,
 
 #endif	/* CONFIG_SCHED_FREQ_INPUT */
 
-static int account_busy_for_task_demand(struct task_struct *p, int event)
+static int 
+account_busy_for_task_demand(struct rq *rq, struct task_struct *p, int event)
 {
 	/* No need to bother updating task demand for exiting tasks
 	 * or the idle task. */
@@ -2181,6 +2182,17 @@ static int account_busy_for_task_demand(struct task_struct *p, int event)
 	if (event == TASK_WAKE || (!sched_account_wait_time &&
 			 (event == PICK_NEXT_TASK || event == TASK_MIGRATE)))
 		return 0;
+
+	/*
+	 * TASK_UPDATE can be called on sleeping task, when its moved between
+	 * related groups
+	 */
+	if (event == TASK_UPDATE) {
+		if (rq->curr == p)
+			return 1;
+
+		return p->on_rq ? sched_account_wait_time : 0;
+	}
 
 	return 1;
 }
@@ -2317,7 +2329,7 @@ static void update_task_demand(struct task_struct *p, struct rq *rq,
 	u32 window_size = sched_ravg_window;
 
 	new_window = mark_start < window_start;
-	if (!account_busy_for_task_demand(p, event)) {
+	if (!account_busy_for_task_demand(rq, p, event)) {
 		if (new_window)
 			/* If the time accounted isn't being accounted as
 			 * busy time, and a new window started, only the
