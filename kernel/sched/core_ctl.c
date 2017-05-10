@@ -43,6 +43,7 @@ struct cluster_data {
 	unsigned int num_cpus;
 	unsigned int need_cpus;
 	unsigned int task_thres;
+	unsigned int max_nr;
 	s64 need_ts;
 	struct list_head lru;
 	bool pending;
@@ -509,7 +510,6 @@ static struct kobj_type ktype_core_ctl = {
 
 #define RQ_AVG_TOLERANCE 2
 #define RQ_AVG_DEFAULT_MS 20
-#define NR_RUNNING_TOLERANCE 50
 static unsigned int rq_avg_period_ms = RQ_AVG_DEFAULT_MS;
 
 static s64 rq_avg_timestamp_ms;
@@ -518,6 +518,7 @@ static struct timer_list rq_avg_timer;
 static void update_running_avg(bool trigger_update)
 {
 	int avg, iowait_avg, big_avg, old_nrrun;
+	int max_nr, big_max_nr;
 	s64 now;
 	unsigned long flags;
 	struct cluster_data *cluster;
@@ -531,39 +532,17 @@ static void update_running_avg(bool trigger_update)
 		return;
 	}
 	rq_avg_timestamp_ms = now;
-	sched_get_nr_running_avg(&avg, &iowait_avg, &big_avg);
+	sched_get_nr_running_avg(&avg, &iowait_avg, &big_avg,
+				 &max_nr, &big_max_nr);
 
 	spin_unlock_irqrestore(&state_lock, flags);
-
-	/*
-	 * Round up to the next integer if the average nr running tasks
-	 * is within NR_RUNNING_TOLERANCE/100 of the next integer.
-	 * If normal rounding up is used, it will allow a transient task
-	 * to trigger online event. By the time core is onlined, the task
-	 * has finished.
-	 * Rounding to closest suffers same problem because scheduler
-	 * might only provide running stats per jiffy, and a transient
-	 * task could skew the number for one jiffy. If core control
-	 * samples every 2 jiffies, it will observe 0.5 additional running
-	 * average which rounds up to 1 task.
-	 */
-	avg = (avg % 100 >= NR_RUNNING_TOLERANCE ? 1 : 0) + (avg / 100);
-	big_avg = (big_avg % 100 >= NR_RUNNING_TOLERANCE ? 1 : 0) + (big_avg / 100);
 
 	for_each_cluster(cluster, index) {
 		if (!cluster->inited)
 			continue;
 		old_nrrun = cluster->nrrun;
-		/*
-		 * Big cluster only need to take care of big tasks, but if
-		 * there are not enough big cores, big tasks need to be run
-		 * on little as well. Thus for little's runqueue stat, it
-		 * has to use overall runqueue average, or derive what big
-		 * tasks would have to be run on little. The latter approach
-		 * is not easy to get given core control reacts much slower
-		 * than scheduler, and can't predict scheduler's behavior.
-		 */
 		cluster->nrrun = cluster->is_big_cluster ? big_avg : avg;
+		cluster->max_nr = cluster->is_big_cluster ? big_max_nr : max_nr;
 		if (cluster->nrrun != old_nrrun) {
 			if (trigger_update)
 				apply_need(cluster);
@@ -574,6 +553,7 @@ static void update_running_avg(bool trigger_update)
 	return;
 }
 
+#define MAX_NR_THRESHOLD	4
 /* adjust needed CPUs based on current runqueue information */
 static unsigned int apply_task_need(const struct cluster_data *cluster,
 				    unsigned int new_need)
@@ -584,7 +564,15 @@ static unsigned int apply_task_need(const struct cluster_data *cluster,
 
 	/* only online more cores if there are tasks to run */
 	if (cluster->nrrun > new_need)
-		return new_need + 1;
+		new_need = new_need + 1;
+
+	/*
+	 * We don't want tasks to be overcrowded in a cluster.
+	 * If any CPU has more than MAX_NR_THRESHOLD in the last
+	 * window, bring another CPU to help out.
+	 */
+	if (cluster->max_nr > MAX_NR_THRESHOLD)
+		new_need = new_need + 1;
 
 	return new_need;
 }

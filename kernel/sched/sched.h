@@ -1104,6 +1104,11 @@ static inline int same_cluster(int src_cpu, int dst_cpu)
 	return cpu_rq(src_cpu)->cluster == cpu_rq(dst_cpu)->cluster;
 }
 
+static inline bool is_max_capacity_cpu(int cpu)
+{
+	return cpu_max_possible_capacity(cpu) == max_possible_capacity;
+}
+
 static inline int cpu_max_power_cost(int cpu)
 {
 	return cpu_rq(cpu)->cluster->max_power_cost;
@@ -1447,6 +1452,8 @@ static inline void set_hmp_defaults(void) { }
 static inline void clear_reserved(int cpu) { }
 
 #define power_cost(...) 0
+
+static inline bool is_max_capacity_cpu(int cpu) { return true; }
 
 #define trace_sched_cpu_load(...)
 #define trace_sched_cpu_load_lb(...)

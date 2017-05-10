@@ -1054,6 +1054,11 @@ static inline int same_cluster(int src_cpu, int dst_cpu)
 	return cpu_rq(src_cpu)->cluster == cpu_rq(dst_cpu)->cluster;
 }
 
+static inline bool is_max_capacity_cpu(int cpu)
+{
+	return cpu_max_possible_capacity(cpu) == max_possible_capacity;
+}
+
 /*
  * 'load' is in reference to "best cpu" at its best frequency.
  * Scale that in reference to a given cpu, accounting for how bad it is
@@ -1326,6 +1331,8 @@ static inline unsigned int power_cost(u64 task_load, int cpu)
 {
 	return SCHED_POWER_SCALE;
 }
+
+static inline bool is_max_capacity_cpu(int cpu) { return true; }
 
 #define trace_sched_cpu_load(...)
 
