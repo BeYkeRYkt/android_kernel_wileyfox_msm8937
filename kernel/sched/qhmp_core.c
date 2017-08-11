@@ -1670,31 +1670,31 @@ unsigned int max_load_scale_factor = 1024; /* max possible load scale factor */
 /* Mask of all CPUs that have  max_possible_capacity */
 cpumask_t mpc_mask = CPU_MASK_ALL;
 
-/* Window size (in ns) */
-__read_mostly unsigned int sched_ravg_window = 10000000;
-
 /* Min window size (in ns) = 10ms */
-#define MIN_SCHED_RAVG_WINDOW 10000000
+#define MIN_SCHED_RAVG_WINDOW ((10000000 / TICK_NSEC) * TICK_NSEC)
 
 /* Max window size (in ns) = 1s */
-#define MAX_SCHED_RAVG_WINDOW 1000000000
+#define MAX_SCHED_RAVG_WINDOW ((1000000000 / TICK_NSEC) * TICK_NSEC)
+
+/* Window size (in ns) */
+__read_mostly unsigned int sched_ravg_window = MIN_SCHED_RAVG_WINDOW;
 
 /* Thresholds used in preferred cluster evaluations */
 
 /*
  * period = sysctl_sched_grp_task_active_windows * sched_ravg_window
  */
-__read_mostly unsigned int sched_grp_task_active_period = 10000000;
+__read_mostly unsigned int sched_grp_task_active_period = 1 * MIN_SCHED_RAVG_WINDOW;
 
 /*
  * delta = sched_ravg_window / 4
  */
-__read_mostly unsigned int sched_grp_min_task_load_delta = 2500000;
+__read_mostly unsigned int sched_grp_min_task_load_delta = MIN_SCHED_RAVG_WINDOW / 4;
 
 /*
  * delta = sched_ravg_window / 10;
  */
-__read_mostly unsigned int sched_grp_min_cluster_update_delta = 1000000;
+__read_mostly unsigned int sched_grp_min_cluster_update_delta = MIN_SCHED_RAVG_WINDOW / 10;
 
 /* Temporarily disable window-stats activity on all cpus */
 unsigned int __read_mostly sched_disable_window_stats;
@@ -1710,10 +1710,27 @@ static inline int exiting_task(struct task_struct *p)
 
 static int __init set_sched_ravg_window(char *str)
 {
+	unsigned int adj_window;
+	bool no_pelt = sched_use_pelt;
+
 	get_option(&str, &sched_ravg_window);
 
-	sched_use_pelt = (sched_ravg_window < MIN_SCHED_RAVG_WINDOW ||
-				sched_ravg_window > MAX_SCHED_RAVG_WINDOW);
+	/* Adjust for CONFIG_HZ */
+	adj_window = (sched_ravg_window / TICK_NSEC) * TICK_NSEC;
+
+	/* Warn if we're a bit too far away from the expected window size */
+	WARN(adj_window < sched_ravg_window - NSEC_PER_MSEC,
+	     "tick-adjusted window size %u, original was %u\n", adj_window,
+	     sched_ravg_window);
+
+	sched_ravg_window = adj_window;
+
+	sched_use_pelt = sched_use_pelt ||
+			(sched_ravg_window < MIN_SCHED_RAVG_WINDOW ||
+			 sched_ravg_window > MAX_SCHED_RAVG_WINDOW);
+
+	WARN(!no_pelt && sched_use_pelt,
+	     "invalid window size, disabling WALT\n");
 
 	return 0;
 }
