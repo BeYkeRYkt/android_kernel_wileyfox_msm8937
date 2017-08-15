@@ -406,7 +406,7 @@ static ssize_t store_always_online_cpu(struct cluster_data *state,
 	unsigned int val[MAX_CPUS_PER_CLUSTER];
 	int ret;
 
-	ret = sscanf(buf, "%u %u %u %u\n", &val[0], &val[1], &val[2], &val[3]);
+	ret = sscanf(buf, "%u %u %u %u", &val[0], &val[1], &val[2], &val[3]);
 	if (ret != 1 && ret != state->num_cpus)
 		return -EINVAL;
 
