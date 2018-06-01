@@ -2591,10 +2591,23 @@ static DEFINE_MUTEX(boost_mutex);
 static void boost_kick_cpus(void)
 {
 	int i;
+	u32 nr_running;
 
 	for_each_online_cpu(i) {
-		if (cpu_capacity(i) != max_capacity)
-			boost_kick(i);
+		/*
+		 * kick only "small" cluster
+		 */
+		if (cpu_capacity(i) != max_capacity) {
+			nr_running = ACCESS_ONCE(cpu_rq(i)->nr_running);
+
+			/*
+			 * make sense to interrupt CPU if its run-queue
+			 * has something running in order to check for
+			 * migration afterwards, otherwise skip it.
+			 */
+			if (nr_running)
+				boost_kick(i);
+		}
 	}
 }
 
