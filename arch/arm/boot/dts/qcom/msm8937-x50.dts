@@ -669,3 +669,9 @@
 	/delete-property/qcom,lra-res-cal-period;
 	/delete-property/qcom,misc-trim-error-rc19p2-clk-reg-present;
 };
+
+/* GPU overrides */
+&msm_gpu {
+	/* disable mem pools */
+	/delete-node/qcom,gpu-mempools;
+};
