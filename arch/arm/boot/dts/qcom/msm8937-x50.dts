@@ -252,6 +252,11 @@
 		qcom,gpio-tbl-label = "CCI_I2C_DATA0",
                                                 "CCI_I2C_CLK0";
 	};
+
+	/* Disable secure_mem node */
+	qcom,ion {
+		/delete-node/ qcom,ion-heap@8;
+	};
 };
 
 &spmi_bus {
@@ -674,4 +679,8 @@
 &msm_gpu {
 	/* disable mem pools */
 	/delete-node/qcom,gpu-mempools;
+};
+
+&secure_mem {
+	status = "disabled";
 };
