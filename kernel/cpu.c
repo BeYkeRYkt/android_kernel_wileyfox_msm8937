@@ -21,6 +21,7 @@
 #include <linux/suspend.h>
 #include <linux/lockdep.h>
 #include <linux/tick.h>
+#include <linux/cpuset.h>
 #include <trace/events/power.h>
 
 #include <trace/events/sched.h>
@@ -422,6 +423,18 @@ int __ref cpu_down(unsigned int cpu)
 {
 	int err;
 
+	/*
+	 * When cpusets are enabled, the rebuilding of the scheduling
+	 * domains is deferred to a workqueue context. Make sure
+	 * that the work is completed before proceeding to the next
+	 * hotplug. Otherwise scheduler observes an inconsistent
+	 * view of online and offline CPUs in the root domain. If
+	 * the online CPUs are still stuck in the offline (default)
+	 * domain, those CPUs would not be visible when scheduling
+	 * happens on from other CPUs in the root domain.
+	 */
+	cpuset_wait_for_hotplug();
+
 	cpu_maps_update_begin();
 
 	if (cpu_hotplug_disabled) {
@@ -552,6 +565,8 @@ int cpu_up(unsigned int cpu)
 {
 	int err = 0;
 	int switch_err = 0;
+
+	cpuset_wait_for_hotplug();
 
 	switch_err = switch_to_rt_policy();
 	if (switch_err < 0)
