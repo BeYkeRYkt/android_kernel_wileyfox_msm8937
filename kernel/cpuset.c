@@ -2133,7 +2133,7 @@ int __init cpuset_init(void)
 		BUG();
 
 	cpumask_setall(top_cpuset.cpus_allowed);
-	cpumask_setall(top_cpuset.cpus_requested);
+	cpumask_copy(top_cpuset.cpus_requested, cpu_possible_mask);
 	nodes_setall(top_cpuset.mems_allowed);
 	cpumask_setall(top_cpuset.effective_cpus);
 	nodes_setall(top_cpuset.effective_mems);
