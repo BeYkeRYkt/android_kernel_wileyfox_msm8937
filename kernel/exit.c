@@ -716,7 +716,7 @@ void do_exit(long code)
 #else
 		pr_alert("Fixing recursive fault but reboot is needed!\n");
 #endif
-		futex_exit_done(tsk);
+		futex_exit_recursive(tsk);
 		set_current_state(TASK_UNINTERRUPTIBLE);
 		schedule();
 	}
@@ -724,13 +724,6 @@ void do_exit(long code)
 	exit_signals(tsk);  /* sets PF_EXITING */
 
 	sched_exit(tsk);
-
-	/*
-	 * tsk->flags are checked in the futex code to protect against
-	 * an exiting task cleaning up the robust pi futexes.
-	 */
-	smp_mb();
-	raw_spin_unlock_wait(&tsk->pi_lock);
 
 	if (unlikely(in_atomic()))
 		pr_info("note: %s[%d] exited with preempt_count %d\n",
