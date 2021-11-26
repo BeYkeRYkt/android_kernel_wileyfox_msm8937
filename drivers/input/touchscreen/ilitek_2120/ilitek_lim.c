@@ -2808,7 +2808,7 @@ static int ilitek_i2c_probe(struct i2c_client *client,
 #else
 	ret = 1;
 #endif
-	if ((ret == 1)) {
+	if (ret == 1) {
 		// register input device
 		ilitek_set_input_param(i2c.input_dev, i2c.max_tp, i2c.max_x, i2c.max_y);
 		ret = input_register_device(i2c.input_dev);
