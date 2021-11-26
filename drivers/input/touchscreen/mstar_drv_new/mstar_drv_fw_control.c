@@ -437,20 +437,12 @@ static void _DrvFwCtrlMsg22xxChangeVoltage(void)
     {
         nNewTrimValue = nNewTrimValue - 0x20;
     }
-    else
-    {
-        nNewTrimValue = nNewTrimValue;
-    }
     
     if ((nTempValue & 0x10) != 0x10)
     {
         if (nNewTrimValue >= 0x0F && nNewTrimValue < 0x1F)
         {
             nNewTrimValue = 0x0F;
-        }
-        else
-        {
-            nNewTrimValue = nNewTrimValue;
         }
     }
 
