@@ -552,10 +552,10 @@ void hdd_copy_ht_caps(struct ieee80211_ht_cap *hdd_ht_cap,
         hdd_ht_cap->mcs.rx_mask[i] =
             roam_ht_cap->supportedMCSSet[i];
 
-        hdd_ht_cap->mcs.rx_highest =
+    hdd_ht_cap->mcs.rx_highest =
             ((short) (roam_ht_cap->supportedMCSSet[11]) << 8) |
             ((short) (roam_ht_cap->supportedMCSSet[10]));
-        hdd_ht_cap->mcs.tx_params =
+    hdd_ht_cap->mcs.tx_params =
             roam_ht_cap->supportedMCSSet[12];
 
 }
@@ -594,7 +594,7 @@ void hdd_copy_vht_caps(struct ieee80211_vht_cap *hdd_vht_cap,
     temp_vht_cap = roam_vht_cap->supportedChannelWidthSet &
         (IEEE80211_VHT_CAP_SUPP_CHAN_WIDTH_MASK >>
             VHT_CAP_SUPP_CHAN_WIDTH_MASK_SHIFT);
-    if (temp_vht_cap)
+    if (temp_vht_cap) {
         if (roam_vht_cap->supportedChannelWidthSet &
             (IEEE80211_VHT_CAP_SUPP_CHAN_WIDTH_160MHZ >>
             VHT_CAP_SUPP_CHAN_WIDTH_MASK_SHIFT))
@@ -607,6 +607,7 @@ void hdd_copy_vht_caps(struct ieee80211_vht_cap *hdd_vht_cap,
             hdd_vht_cap->vht_cap_info |=
             temp_vht_cap <<
             IEEE80211_VHT_CAP_SUPP_CHAN_WIDTH_160_80PLUS80MHZ;
+    }
     if (roam_vht_cap->ldpcCodingCap)
         hdd_vht_cap->vht_cap_info |= IEEE80211_VHT_CAP_RXLDPC;
     if (roam_vht_cap->shortGI80MHz)
@@ -4414,6 +4415,7 @@ eHalStatus hdd_smeRoamCallback( void *pContext, tCsrRoamInfo *pRoamInfo, tANI_U3
        case eCSR_ROAM_STA_CHANNEL_SWITCH:
          {
              hdd_adapter_t *pHostapdAdapter = NULL;
+             eCsrPhyMode phy_mode = 0;
              pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
              pHddStaCtx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
 
@@ -4427,6 +4429,24 @@ eHalStatus hdd_smeRoamCallback( void *pContext, tCsrRoamInfo *pRoamInfo, tANI_U3
 
              pHddStaCtx->conn_info.operationChannel =
                  pRoamInfo->chan_info.chan_id;
+
+             if(pRoamInfo->pProfile) {
+                 phy_mode = pRoamInfo->pProfile->phyMode;
+             }
+
+             status = hdd_chan_change_notify(pAdapter,
+                                             pAdapter->dev,
+                                             pRoamInfo->chan_info.chan_id,
+                                             phy_mode);
+
+             if(status != VOS_STATUS_SUCCESS) {
+                 hddLog(VOS_TRACE_LEVEL_ERROR,
+                        "%s: hdd_chan_change_notify failed", __func__);
+             }
+
+             hddLog(VOS_TRACE_LEVEL_ERROR,
+                    "%s: Channel switch event updated to upper layer to %d",
+                    __func__, pRoamInfo->chan_info.chan_id);
 
              pHostapdAdapter = hdd_get_adapter(pHddCtx, WLAN_HDD_SOFTAP);
              if (pHostapdAdapter &&

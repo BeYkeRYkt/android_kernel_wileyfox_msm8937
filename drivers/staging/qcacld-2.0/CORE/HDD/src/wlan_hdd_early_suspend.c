@@ -1486,7 +1486,7 @@ static void hdd_conf_suspend_ind(hdd_context_t* pHddCtx,
     hddLog(VOS_TRACE_LEVEL_INFO,
       "%s: send wlan suspend indication", __func__);
 
-    if((pHddCtx->cfg_ini->nEnableSuspend == WLAN_MAP_SUSPEND_TO_MCAST_BCAST_FILTER))
+    if(pHddCtx->cfg_ini->nEnableSuspend == WLAN_MAP_SUSPEND_TO_MCAST_BCAST_FILTER)
     {
         //Configure supported OffLoads
         hdd_conf_hostoffload(pAdapter, TRUE);
@@ -2516,6 +2516,8 @@ VOS_STATUS hdd_wlan_re_init(void *hif_sc)
    pHddCtx->hdd_mcastbcast_filter_set = FALSE;
    pHddCtx->btCoexModeSet = false;
    hdd_register_mcast_bcast_filter(pHddCtx);
+
+   wlan_hdd_process_tdcc_ps(NULL, PS_TDCC_RESET, NULL, NULL);
 
    /* Allow the phone to go to sleep */
    hdd_allow_suspend(WIFI_POWER_EVENT_WAKELOCK_DRIVER_REINIT);

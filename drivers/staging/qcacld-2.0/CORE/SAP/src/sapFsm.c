@@ -2139,7 +2139,8 @@ uint8_t sap_select_default_oper_chan_ini(tHalHandle hal, uint32_t acs_11a)
 				(operating_band == RF_SUBBAND_5_MID_GHZ) ?
 				(channel = SAP_DEFAULT_MID_5GHZ_CHANNEL) :
 				(operating_band == RF_SUBBAND_5_HIGH_GHZ) ?
-				(channel = SAP_DEFAULT_HIGH_5GHZ_CHANNEL) : 0;
+				(channel = SAP_DEFAULT_HIGH_5GHZ_CHANNEL) :
+				(channel = SAP_DEFAULT_LOW_5GHZ_CHANNEL);
 		else
 			channel = SAP_DEFAULT_LOW_5GHZ_CHANNEL;
 
@@ -3129,10 +3130,12 @@ sapGotoStarting
     halStatus = sme_RoamConnect(hHal, sapContext->sessionId,
             &sapContext->csrRoamProfile,
             &sapContext->csrRoamId);
-    if (eHAL_STATUS_SUCCESS != halStatus)
+    if (eHAL_STATUS_SUCCESS != halStatus) {
         VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_ERROR,
         "%s: Failed to issue sme_RoamConnect", __func__);
-        return halStatus;
+    }
+
+    return halStatus;
 
 }// sapGotoStarting
 
@@ -4287,7 +4290,7 @@ sapFsm
     switch (stateVar)
     {
         case eSAP_DISCONNECTED:
-            if ((msg == eSAP_HDD_START_INFRA_BSS))
+            if (msg == eSAP_HDD_START_INFRA_BSS)
             {
                 /* Transition from eSAP_DISCONNECTED to eSAP_CH_SELECT (both without substates) */
                 VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO_HIGH, "In %s, new from state %s => %s, session id %d",
@@ -5415,8 +5418,8 @@ static VOS_STATUS sapGetChannelList(ptSapContext sapContext,
 #ifdef FEATURE_WLAN_CH_AVOID
                 for( i = 0; i < NUM_20MHZ_RF_CHANNELS; i++ )
                 {
-                    if( (safeChannels[i].channelNumber ==
-                                rfChannels[loopCount].channelNum) )
+                    if(safeChannels[i].channelNumber ==
+                                rfChannels[loopCount].channelNum)
                     {
                         /* Check if channel is safe */
                         if(VOS_TRUE == safeChannels[i].isSafe)
