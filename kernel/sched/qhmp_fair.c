@@ -4477,6 +4477,7 @@ __update_load_avg(u64 now, int cpu, struct sched_avg *sa,
 	u32 contrib;
 	unsigned int delta_w, scaled_delta_w, decayed = 0;
 	unsigned long scale_freq, scale_cpu;
+	struct sched_entity *se = NULL;
 
 	delta = now - sa->last_update_time;
 	/*
@@ -4496,6 +4497,12 @@ __update_load_avg(u64 now, int cpu, struct sched_avg *sa,
 	if (!delta)
 		return 0;
 	sa->last_update_time = now;
+
+	if (sched_use_pelt && !cfs_rq && weight) {
+		se = container_of(sa, struct sched_entity, avg);
+		if (entity_is_task(se) && se->on_rq)
+			dec_hmp_sched_stats_fair(rq_of(cfs_rq), task_of(se));
+	}
 
 	scale_freq = arch_scale_freq_capacity(NULL, cpu);
 	scale_cpu = arch_scale_cpu_capacity(NULL, cpu);
@@ -4523,6 +4530,10 @@ __update_load_avg(u64 now, int cpu, struct sched_avg *sa,
 			}
 			add_to_scaled_stat(cpu, sa, delta_w);
 		}
+
+		if (se && entity_is_task(se) && se->on_rq)
+			inc_hmp_sched_stats_fair(rq_of(cfs_rq), task_of(se));
+
 		if (running)
 			sa->util_sum += scaled_delta_w * scale_cpu;
 
@@ -4707,11 +4718,6 @@ static inline void update_load_avg(struct sched_entity *se, int update_tg)
 	u64 now = cfs_rq_clock_task(cfs_rq);
 	int cpu = cpu_of(rq_of(cfs_rq));
 
-	if (entity_is_task(se)) {
-		if (sched_use_pelt && se->on_rq)
-			dec_hmp_sched_stats_fair(rq_of(cfs_rq), task_of(se));
-	}
-
 	/*
 	 * Track task load average for carrying it to new CPU after migrated, and
 	 * track group sched_entity load average for task_h_load calc in migration
@@ -4719,9 +4725,6 @@ static inline void update_load_avg(struct sched_entity *se, int update_tg)
 	__update_load_avg(now, cpu, &se->avg,
 			  se->on_rq * scale_load_down(se->load.weight),
 			  cfs_rq->curr == se, NULL);
-
-	if (sched_use_pelt && entity_is_task(se) && se->on_rq)
-		inc_hmp_sched_stats_fair(rq_of(cfs_rq), task_of(se));
 
 	if (update_cfs_rq_load_avg(now, cfs_rq) && update_tg)
 		update_tg_load_avg(cfs_rq, 0);
