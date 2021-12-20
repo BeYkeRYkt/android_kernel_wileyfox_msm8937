@@ -4183,6 +4183,9 @@ static inline int migration_needed(struct rq *rq, struct task_struct *p)
 		return 0;
 
 	if (sched_boost()) {
+		if (nice > sched_upmigrate_min_nice)
+			return 0;
+
 		if (cpu_capacity(cpu) != max_capacity)
 			return UP_MIGRATION;
 
