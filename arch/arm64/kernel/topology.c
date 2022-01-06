@@ -37,6 +37,16 @@
  */
 static DEFINE_PER_CPU(unsigned long, cpu_scale) = SCHED_CAPACITY_SCALE;
 
+unsigned long arch_scale_freq_power(struct sched_domain *sd, int cpu)
+{
+	return per_cpu(cpu_scale, cpu);
+}
+
+static void set_power_scale(unsigned int cpu, unsigned long power)
+{
+	per_cpu(cpu_scale, cpu) = power;
+}
+
 unsigned long scale_cpu_capacity(struct sched_domain *sd, int cpu)
 {
 #ifdef CONFIG_CPU_FREQ
@@ -361,15 +371,15 @@ static void __init parse_dt_cpu_power(void)
  * boot. The update of all CPUs is in O(n^2) for heteregeneous system but the
  * function returns directly for SMP system.
  */
-static void update_cpu_capacity(unsigned int cpu)
+static void update_cpu_power(unsigned int cpu)
 {
 	if (!cpu_capacity(cpu))
 		return;
 
-	set_capacity_scale(cpu, cpu_capacity(cpu) / middle_capacity);
+	set_power_scale(cpu, cpu_capacity(cpu) / middle_capacity);
 
-	pr_info("CPU%u: update cpu_capacity %lu\n",
-		cpu, arch_scale_cpu_capacity(NULL, cpu));
+	pr_info("CPU%u: update cpu_power %lu\n",
+		cpu, arch_scale_freq_power(NULL, cpu));
 }
 
 /*
@@ -381,6 +391,16 @@ EXPORT_SYMBOL_GPL(cpu_topology);
 const struct cpumask *cpu_coregroup_mask(int cpu)
 {
 	return &cpu_topology[cpu].core_sibling;
+}
+
+static void update_cpu_capacity(unsigned int cpu)
+{
+	unsigned long capacity = SCHED_CAPACITY_SCALE;
+
+	set_capacity_scale(cpu, capacity);
+
+	pr_debug("CPU%d: update cpu_capacity %lu\n",
+		cpu, arch_scale_cpu_capacity(NULL, cpu));
 }
 
 static void update_siblings_masks(unsigned int cpuid)
@@ -441,6 +461,7 @@ void store_cpu_topology(unsigned int cpuid)
 
 topology_populated:
 	update_siblings_masks(cpuid);
+	update_cpu_power(cpuid);
 	update_cpu_capacity(cpuid);
 }
 
@@ -467,7 +488,7 @@ static void __init reset_cpu_power(void)
 	unsigned int cpu;
 
 	for_each_possible_cpu(cpu)
-		set_capacity_scale(cpu, SCHED_CAPACITY_SCALE);
+		set_power_scale(cpu, SCHED_CAPACITY_SCALE);
 }
 
 void __init init_cpu_topology(void)
