@@ -2892,8 +2892,15 @@ static int compute_capacity(struct sched_cluster *cluster)
 
 static int compute_max_possible_capacity(struct sched_cluster *cluster)
 {
-	return div_u64(((u64) cluster->capacity) *
-			cluster->max_possible_freq, cluster->max_freq);
+	int capacity = 1024;
+
+	capacity *= capacity_scale_cpu_efficiency(cluster);
+	capacity >>= 10;
+
+	capacity *= (1024 * cluster->max_possible_freq) / min_max_freq;
+	capacity >>= 10;
+
+	return capacity;
 }
 
 static int compute_load_scale_factor(struct sched_cluster *cluster)
