@@ -71,10 +71,10 @@ struct cpu_data {
 
 static DEFINE_PER_CPU(struct cpu_data, cpu_state);
 static struct cluster_data cluster_state[MAX_CLUSTERS];
-static unsigned int num_clusters;
+static unsigned int core_ctl_num_clusters;
 
 #define for_each_cluster(cluster, idx) \
-	for ((cluster) = &cluster_state[idx]; (idx) < num_clusters;\
+	for ((cluster) = &cluster_state[idx]; (idx) < core_ctl_num_clusters;\
 		(idx)++, (cluster) = &cluster_state[idx])
 
 static DEFINE_SPINLOCK(state_lock);
@@ -988,7 +988,7 @@ static struct cluster_data *find_cluster_by_first_cpu(unsigned int first_cpu)
 {
 	unsigned int i;
 
-	for (i = 0; i < num_clusters; ++i) {
+	for (i = 0; i < core_ctl_num_clusters; ++i) {
 		if (cluster_state[i].first_cpu == first_cpu)
 			return &cluster_state[i];
 	}
@@ -1014,13 +1014,13 @@ static int cluster_init(const struct cpumask *mask)
 
 	pr_info("Creating CPU group %d\n", first_cpu);
 
-	if (num_clusters == MAX_CLUSTERS) {
+	if (core_ctl_num_clusters == MAX_CLUSTERS) {
 		pr_err("Unsupported number of clusters. Only %u supported\n",
 								MAX_CLUSTERS);
 		return -EINVAL;
 	}
-	cluster = &cluster_state[num_clusters];
-	++num_clusters;
+	cluster = &cluster_state[core_ctl_num_clusters];
+	++core_ctl_num_clusters;
 
 	cluster->num_cpus = cpumask_weight(mask);
 	if (cluster->num_cpus > MAX_CPUS_PER_CLUSTER) {
