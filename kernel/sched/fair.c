@@ -9220,9 +9220,15 @@ static int should_we_balance(struct lb_env *env)
 	/*
 	 * In the newly idle case, we will allow all the cpu's
 	 * to do the newly idle load balance.
+	 *
+	 * However, we bail out if we already have tasks, to optimize
+	 * wakeup latency.
 	 */
-	if (env->idle == CPU_NEWLY_IDLE)
+	if (env->idle == CPU_NEWLY_IDLE) {
+		if (env->dst_rq->nr_running > 0)
+			return 0;
 		return 1;
+	}
 
 	sg_cpus = sched_group_cpus(sg);
 	sg_mask = sched_group_mask(sg);
