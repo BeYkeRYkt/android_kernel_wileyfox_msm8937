@@ -3,7 +3,7 @@
  * policies)
  */
 
-#include "sched.h"
+#include "qhmp_sched.h"
 
 #include <linux/interrupt.h>
 #include <linux/slab.h>
