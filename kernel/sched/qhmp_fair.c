@@ -4523,15 +4523,12 @@ __update_load_avg(u64 now, int cpu, struct sched_avg *sa,
 		scaled_delta_w = cap_scale(delta_w, scale_freq);
 		if (weight) {
 			sa->load_sum += weight * scaled_delta_w;
+			add_to_scaled_stat(cpu, sa, delta_w);
 			if (cfs_rq) {
 				cfs_rq->runnable_load_sum +=
 						weight * scaled_delta_w;
 			}
-			add_to_scaled_stat(cpu, sa, delta_w);
 		}
-
-		if (se && entity_is_task(se) && se->on_rq)
-			inc_hmp_sched_stats_fair(rq_of(cfs_rq), task_of(se));
 
 		if (running)
 			sa->util_sum += scaled_delta_w * scale_cpu;
@@ -4555,10 +4552,10 @@ __update_load_avg(u64 now, int cpu, struct sched_avg *sa,
 		contrib = cap_scale(contrib, scale_freq);
 		if (weight) {
 			sa->load_sum += weight * contrib;
+			add_to_scaled_stat(cpu, sa, contrib);
 			if (cfs_rq) {
 				cfs_rq->runnable_load_sum += weight * contrib;
 			}
-			add_to_scaled_stat(cpu, sa, contrib);
 		}
 		if (running)
 			sa->util_sum += contrib * scale_cpu;
@@ -4568,11 +4565,15 @@ __update_load_avg(u64 now, int cpu, struct sched_avg *sa,
 	scaled_delta = cap_scale(delta, scale_freq);
 	if (weight) {
 		sa->load_sum += weight * scaled_delta;
+		add_to_scaled_stat(cpu, sa, delta);
 		if (cfs_rq) {
 			cfs_rq->runnable_load_sum += weight * scaled_delta;
 		}
-		add_to_scaled_stat(cpu, sa, delta);
 	}
+
+	if (se && entity_is_task(se) && se->on_rq)
+		inc_hmp_sched_stats_fair(rq_of(cfs_rq), task_of(se));
+
 	if (running)
 		sa->util_sum += scaled_delta * scale_cpu;
 
