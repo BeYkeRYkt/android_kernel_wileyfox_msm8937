@@ -14,7 +14,11 @@
  *                    Michael Trimarchi <michael@amarulasolutions.com>,
  *                    Fabio Checconi <fchecconi@gmail.com>
  */
+#ifdef CONFIG_SCHED_QHMP
+#include "qhmp_sched.h"
+#else
 #include "sched.h"
+#endif
 
 #include <linux/slab.h>
 
