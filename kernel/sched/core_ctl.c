@@ -19,6 +19,7 @@
 #include <linux/kthread.h>
 #include <linux/sched.h>
 #include <linux/sched/rt.h>
+#include <linux/mutex.h>
 
 #include <trace/events/sched.h>
 
@@ -55,6 +56,7 @@ struct cluster_data {
 	struct task_struct *hotplug_thread;
 	unsigned int first_cpu;
 	struct kobject kobj;
+	struct list_head pending_lru;
 	bool disabled;
 };
 
@@ -67,6 +69,7 @@ struct cpu_data {
 	bool not_preferred;
 	struct cluster_data *cluster;
 	struct list_head sib;
+	struct list_head pending_sib;
 	bool always_online_cpu;
 };
 
@@ -79,8 +82,12 @@ static unsigned int core_ctl_num_clusters;
 		(idx)++, (cluster) = &cluster_state[idx])
 
 static DEFINE_SPINLOCK(state_lock);
+static DEFINE_SPINLOCK(pending_lru_lock);
+static DEFINE_MUTEX(lru_lock);
 static void apply_need(struct cluster_data *state);
 static void wake_up_hotplug_thread(struct cluster_data *state);
+static void add_to_pending_lru(struct cpu_data *state);
+static void update_lru(struct cluster_data *cluster);
 
 /* ========================= sysfs interface =========================== */
 
@@ -772,6 +779,24 @@ static int core_ctl_offline_core(unsigned int cpu)
 	return ret;
 }
 
+static void update_lru(struct cluster_data *cluster)
+{
+	struct cpu_data *c, *tmp;
+	unsigned long flags;
+
+	spin_lock_irqsave(&pending_lru_lock, flags);
+	spin_lock(&state_lock);
+
+	list_for_each_entry_safe(c, tmp, &cluster->pending_lru, pending_sib) {
+		list_del_init(&c->pending_sib);
+		list_del(&c->sib);
+		list_add_tail(&c->sib, &cluster->lru);
+	}
+
+	spin_unlock(&state_lock);
+	spin_unlock_irqrestore(&pending_lru_lock, flags);
+}
+
 static void __ref do_hotplug(struct cluster_data *cluster)
 {
 	unsigned int need;
@@ -780,6 +805,7 @@ static void __ref do_hotplug(struct cluster_data *cluster)
 	need = apply_limits(cluster, cluster->need_cpus);
 	pr_debug("Trying to adjust group %u to %u\n", cluster->first_cpu, need);
 
+	mutex_lock(&lru_lock);
 	if (cluster->online_cpus > need) {
 		list_for_each_entry_safe(c, tmp, &cluster->lru, sib) {
 			if (!c->online || c->always_online_cpu)
@@ -802,7 +828,7 @@ static void __ref do_hotplug(struct cluster_data *cluster)
 		 * don't force any busy CPUs offline.
 		 */
 		if (cluster->online_cpus <= cluster->max_cpus)
-			return;
+			goto done;
 
 		list_for_each_entry_safe(c, tmp, &cluster->lru, sib) {
 			if (!c->online || c->always_online_cpu)
@@ -828,7 +854,7 @@ static void __ref do_hotplug(struct cluster_data *cluster)
 		}
 
 		if (cluster->online_cpus == need)
-			return;
+			goto done;
 
 
 		list_for_each_entry_safe(c, tmp, &cluster->lru, sib) {
@@ -843,6 +869,9 @@ static void __ref do_hotplug(struct cluster_data *cluster)
 		}
 
 	}
+done:
+	mutex_unlock(&lru_lock);
+	update_lru(cluster);
 }
 
 static int __ref try_hotplug(void *data)
@@ -868,6 +897,20 @@ static int __ref try_hotplug(void *data)
 	}
 
 	return 0;
+}
+
+static void add_to_pending_lru(struct cpu_data *state)
+{
+	unsigned long flags;
+	struct cluster_data *cluster = state->cluster;
+
+	spin_lock_irqsave(&pending_lru_lock, flags);
+
+	if (!list_empty(&state->pending_sib))
+		list_del(&state->pending_sib);
+	list_add_tail(&state->pending_sib, &cluster->pending_lru);
+
+	spin_unlock_irqrestore(&pending_lru_lock, flags);
 }
 
 static int __ref cpu_callback(struct notifier_block *nfb,
@@ -924,19 +967,36 @@ static int __ref cpu_callback(struct notifier_block *nfb,
 		 * infinite list traversal when thermal (or other entities)
 		 * reject trying to online CPUs.
 		 */
-		spin_lock_irqsave(&state_lock, flags);
-		list_del(&state->sib);
-		list_add_tail(&state->sib, &cluster->lru);
-		spin_unlock_irqrestore(&state_lock, flags);
+		ret = mutex_trylock(&lru_lock);
+		if (ret) {
+			spin_lock_irqsave(&state_lock, flags);
+			list_del(&state->sib);
+			list_add_tail(&state->sib, &cluster->lru);
+			spin_unlock_irqrestore(&state_lock, flags);
+			mutex_unlock(&lru_lock);
+		} else {
+			/*
+			 * lru_lock is held by our hotplug thread to
+			 * prevent concurrent access of lru list. The updates
+			 * are maintained in pending_lru list and lru is
+			 * updated at the end of do_hotplug().
+			 */
+			add_to_pending_lru(state);
+		}
 		break;
 
 	case CPU_DEAD:
 		/* Move a CPU to the end of the LRU when it goes offline. */
-		spin_lock_irqsave(&state_lock, flags);
-		list_del(&state->sib);
-		list_add_tail(&state->sib, &cluster->lru);
-		spin_unlock_irqrestore(&state_lock, flags);
-
+		ret = mutex_trylock(&lru_lock);
+		if (ret) {
+			spin_lock_irqsave(&state_lock, flags);
+			list_del(&state->sib);
+			list_add_tail(&state->sib, &cluster->lru);
+			spin_unlock_irqrestore(&state_lock, flags);
+			mutex_unlock(&lru_lock);
+		} else {
+			add_to_pending_lru(state);
+		}
 		/* Fall through */
 
 	case CPU_UP_CANCELED:
@@ -1024,6 +1084,7 @@ static int cluster_init(const struct cpumask *mask)
 	cluster->task_thres = UINT_MAX;
 	cluster->nrrun = cluster->num_cpus;
 	INIT_LIST_HEAD(&cluster->lru);
+	INIT_LIST_HEAD(&cluster->pending_lru);
 	init_timer(&cluster->timer);
 	spin_lock_init(&cluster->pending_lock);
 	cluster->timer.function = core_ctl_timer_func;
@@ -1040,10 +1101,13 @@ static int cluster_init(const struct cpumask *mask)
 			state->online = true;
 		}
 		list_add_tail(&state->sib, &cluster->lru);
+		INIT_LIST_HEAD(&state->pending_sib);
 	}
 
 	cluster->hotplug_thread = kthread_run(try_hotplug, (void *) cluster,
 					"core_ctl/%d", first_cpu);
+	if (IS_ERR(cluster->hotplug_thread))
+		return PTR_ERR(cluster->hotplug_thread);
 	sched_setscheduler_nocheck(cluster->hotplug_thread, SCHED_FIFO,
 				   &param);
 
