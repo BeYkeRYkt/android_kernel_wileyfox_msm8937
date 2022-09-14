@@ -4195,7 +4195,8 @@ static inline int migration_needed(struct rq *rq, struct task_struct *p)
 		if (nice > sched_upmigrate_min_nice) {
 			if (sysctl_sched_enable_colocation &&
 					p->grp &&
-					p->grp->preferred_cluster->capacity == max_capacity) {
+					p->grp->preferred_cluster->capacity == max_capacity &&
+					cpu_capacity(cpu) != max_capacity) {
 				return UP_MIGRATION;
 			}
 			return 0;
