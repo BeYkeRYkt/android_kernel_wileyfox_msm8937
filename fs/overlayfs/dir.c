@@ -419,9 +419,17 @@ static int ovl_create_or_link(struct dentry *dentry, int mode, dev_t rdev,
 		cap_raise(override_cred->cap_effective, CAP_FOWNER);
 		old_cred = override_creds(override_cred);
 
-		err = ovl_create_over_whiteout(dentry, inode, &stat, link,
-					       hardlink);
+		err = -ENOMEM;
+		override_cred = prepare_creds();
+		if (override_cred) {
+			override_cred->fsuid = old_cred->fsuid;
+			override_cred->fsgid = old_cred->fsgid;
+			put_cred(override_creds(override_cred));
+			put_cred(override_cred);
 
+			err = ovl_create_over_whiteout(dentry, inode, &stat,
+						       link, hardlink);
+		}
 		revert_creds(old_cred);
 		put_cred(override_cred);
 	}
@@ -847,9 +855,13 @@ static int ovl_rename2(struct inode *olddir, struct dentry *old,
 		}
 	} else {
 		new_create = true;
-		if (!d_is_negative(newdentry) &&
-		    (!new_opaque || !ovl_is_whiteout(newdentry)))
-			goto out_dput;
+		if (!d_is_negative(newdentry)) {
+			if (!new_opaque || !ovl_is_whiteout(newdentry))
+				goto out_dput;
+		} else {
+			if (flags & RENAME_EXCHANGE)
+				goto out_dput;
+		}
 	}
 
 	if (olddentry == trap)

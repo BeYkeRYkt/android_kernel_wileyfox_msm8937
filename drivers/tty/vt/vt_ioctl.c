@@ -31,6 +31,8 @@
 #include <asm/io.h>
 #include <asm/uaccess.h>
 
+#include <linux/nospec.h>
+
 #include <linux/kbd_kern.h>
 #include <linux/vt_kern.h>
 #include <linux/kbd_diacr.h>
@@ -713,6 +715,8 @@ int vt_ioctl(struct tty_struct *tty,
 		if (vsa.console == 0 || vsa.console > MAX_NR_CONSOLES)
 			ret = -ENXIO;
 		else {
+			vsa.console = array_index_nospec(vsa.console,
+							 MAX_NR_CONSOLES + 1);
 			vsa.console--;
 			console_lock();
 			ret = vc_allocate(vsa.console);
@@ -894,17 +898,17 @@ int vt_ioctl(struct tty_struct *tty,
 			if (vcp) {
 				int ret;
 				int save_scan_lines = vcp->vc_scan_lines;
-				int save_font_height = vcp->vc_font.height;
+				int save_cell_height = vcp->vc_cell_height;
 
 				if (v.v_vlin)
 					vcp->vc_scan_lines = v.v_vlin;
 				if (v.v_clin)
-					vcp->vc_font.height = v.v_clin;
+					vcp->vc_cell_height = v.v_clin;
 				vcp->vc_resize_user = 1;
 				ret = vc_resize(vcp, v.v_cols, v.v_rows);
 				if (ret) {
 					vcp->vc_scan_lines = save_scan_lines;
-					vcp->vc_font.height = save_font_height;
+					vcp->vc_cell_height = save_cell_height;
 					console_unlock();
 					return ret;
 				}

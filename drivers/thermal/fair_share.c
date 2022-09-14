@@ -100,6 +100,7 @@ static int fair_share_throttle(struct thermal_zone_device *tz, int trip)
 		total_weight += instance->weight;
 		total_instance++;
 	}
+	mutex_lock(&tz->lock);
 
 	list_for_each_entry(instance, &tz->thermal_instances, tz_node) {
 		int percentage;
@@ -119,6 +120,8 @@ static int fair_share_throttle(struct thermal_zone_device *tz, int trip)
 		instance->cdev->updated = false;
 		thermal_cdev_update(cdev);
 	}
+
+	mutex_unlock(&tz->lock);
 	return 0;
 }
 

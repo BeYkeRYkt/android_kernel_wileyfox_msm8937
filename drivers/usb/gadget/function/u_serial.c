@@ -382,12 +382,11 @@ __acquires(&port->port_lock)
 
 	if (!port || !port->port_usb) {
 		pr_err("Error - port or port->usb is NULL.");
-		return -EIO;
+		return status;
 	}
 
 	pool = &port->write_pool;
 	in   = port->port_usb->in;
-
 	while (!list_empty(pool)) {
 		struct usb_request	*req;
 		int			len;
@@ -583,7 +582,7 @@ static void gs_rx_push(struct work_struct *w)
 		}
 
 		/* push data to (open) tty */
-		if (req->actual) {
+		if (req->actual && tty) {
 			char		*packet = req->buf;
 			unsigned	size = req->actual;
 			unsigned	n;

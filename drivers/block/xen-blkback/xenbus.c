@@ -232,9 +232,8 @@ static int xen_blkif_map(struct xen_blkif *blkif, unsigned long shared_page,
 		BUG();
 	}
 
-	err = bind_interdomain_evtchn_to_irqhandler(blkif->domid, evtchn,
-						    xen_blkif_be_int, 0,
-						    "blkif-backend", blkif);
+	err = bind_interdomain_evtchn_to_irqhandler_lateeoi(blkif->domid,
+			evtchn, xen_blkif_be_int, 0, "blkif-backend", blkif);
 	if (err < 0) {
 		xenbus_unmap_ring_vfree(blkif->be->dev, blkif->blk_ring);
 		blkif->blk_rings.common.sring = NULL;
@@ -249,6 +248,7 @@ static int xen_blkif_disconnect(struct xen_blkif *blkif)
 {
 	if (blkif->xenblkd) {
 		kthread_stop(blkif->xenblkd);
+		blkif->xenblkd = NULL;
 		wake_up(&blkif->shutdown_wq);
 	}
 

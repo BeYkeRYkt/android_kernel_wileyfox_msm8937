@@ -182,7 +182,7 @@ static int mmc_bus_suspend(struct device *dev)
 	 * So in case of error call drv->resume.
 	 */
 	if (ret && dev->driver && drv->resume)
-		drv->resume(card);
+		pm_generic_resume(dev);
 
 	return ret;
 }
