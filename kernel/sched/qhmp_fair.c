@@ -4195,59 +4195,77 @@ static inline int migration_needed(struct rq *rq, struct task_struct *p)
 {
 	int nice = task_nice(p);
 	int cpu = cpu_of(rq);
+	int rc = 0;
+	struct related_thread_group *grp;
 
 	if (!sched_enable_hmp || p->state != TASK_RUNNING ||
 	    p->nr_cpus_allowed == 1)
-		return 0;
+		return rc;
 
 	/* No need to migrate task that is about to be throttled */
 	if (task_will_be_throttled(p))
-		return 0;
+		return rc;
 
+	rcu_read_lock(); /* Protected access to p->grp */
+	grp = task_related_thread_group(p);
 	if (sched_boost()) {
 		if (nice > sched_upmigrate_min_nice) {
 			if (sysctl_sched_enable_colocation &&
-					p->grp &&
-					p->grp->preferred_cluster->capacity == max_capacity &&
+					grp &&
+					grp->preferred_cluster->capacity == max_capacity &&
 					cpu_capacity(cpu) != max_capacity) {
-				return UP_MIGRATION;
+				rc = UP_MIGRATION;
 			}
-			return 0;
+			goto done;
 		}
 
-		if (cpu_capacity(cpu) != max_capacity)
-			return UP_MIGRATION;
+		if (cpu_capacity(cpu) != max_capacity) {
+			rc = UP_MIGRATION;
+		}
 
-		return 0;
+		goto done;
 	}
 
-	if (!preferred_cluster(rq->cluster, p))
-		return PREFERRED_CLUSTER_MIGRATION;
+	if (!preferred_cluster(rq->cluster, p)) {
+		rc = PREFERRED_CLUSTER_MIGRATION;
+		goto done;
+	}
 
-	if (is_small_task(p))
-		return 0;
+	if (is_small_task(p)) {
+		goto done;
+	}
 
-	if (sched_cpu_high_irqload(cpu))
-		return IRQLOAD_MIGRATION;
+	if (sched_cpu_high_irqload(cpu)) {
+		rc = IRQLOAD_MIGRATION;
+		goto done;
+	}
 
 	if ((!sysctl_sched_enable_colocation ||
-			!p->grp ||
-			p->grp->preferred_cluster->capacity == min_capacity) &&
+			!grp ||
+			grp->preferred_cluster->capacity == min_capacity) &&
 			(nice > sched_upmigrate_min_nice ||
 			upmigrate_discouraged(p)) &&
-			cpu_capacity(cpu_of(rq)) > min_capacity)
-		return DOWN_MIGRATION;
+			cpu_capacity(cpu_of(rq)) > min_capacity) {
+		rc = DOWN_MIGRATION;
+		goto done;
+	}
 
-	if (!task_will_fit(p, cpu))
-		return UP_MIGRATION;
+	if (!task_will_fit(p, cpu)) {
+		rc = UP_MIGRATION;
+		goto done;
+	}
 
 	if (sysctl_sched_enable_power_aware &&
 	    !is_task_migration_throttled(p) &&
 	    is_cpu_throttling_imminent(cpu) &&
-	    lower_power_cpu_available(p, cpu))
-		return EA_MIGRATION;
+	    lower_power_cpu_available(p, cpu)) {
+		rc = EA_MIGRATION;
+		goto done;
+	}
 
-	return 0;
+done:
+	rcu_read_unlock();
+	return rc;
 }
 
 static DEFINE_RAW_SPINLOCK(migration_lock);
